@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 # ==========================================
 # 1. 網頁基本設定與樣式
 # ==========================================
-st.set_page_config(page_title="股權寶(ELD)收益模擬器", layout="wide", page_icon="📈")
+st.set_page_config(page_title="大豐銀行 - 股權寶(ELD)收益模擬器", layout="wide", page_icon="📈")
 
 st.markdown("""
     <style>
@@ -155,11 +155,9 @@ st.sidebar.info(f"""
 st.sidebar.markdown("---")
 st.sidebar.header("📊 3. 圖表顯示設定")
 
-# 以現價為基準，計算一個合理的拉動極限範圍 (0.1 倍 ~ 2.0 倍)
 min_bound = max(0.0, float(ref_price * 0.1))
 max_bound = float(ref_price * 2.0)
 
-# 給定一個預設的視角區間 (0.4 倍 ~ 1.3 倍)
 default_chart_min = float(ref_price * 0.4)
 default_chart_max = float(ref_price * 1.3)
 
@@ -173,11 +171,10 @@ chart_range = st.sidebar.slider(
 chart_min, chart_max = chart_range
 
 # ==========================================
-# 7. 主區域：互動滑動條 (動態適配設定的橫軸區間)
+# 7. 主區域：互動滑動條 
 # ==========================================
 st.markdown(f"### 🎚️ 模擬【{st.session_state.underlying}】計價日表現")
 
-# 確保滑動條預設值不會超出左側自訂的區間範圍
 default_closing = max(chart_min, min(float(ref_price), chart_max))
 
 closing_price = st.slider(
@@ -207,7 +204,7 @@ pnl = settlement_val - principal
 pnl_pct = (pnl / principal) * 100 if principal else 0
 
 # ==========================================
-# 8. 全新升級的動態資訊面板 (豐富版)
+# 8. 動態資訊面板 
 # ==========================================
 if pnl >= 0:
     bg_color = "#f0fff4"
@@ -235,28 +232,24 @@ else:
 html_panel = f"""
 <div style="display: flex; flex-wrap: wrap; gap: 15px; background-color: {bg_color}; border: 1px solid {border_color}; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
     
-    <!-- 第一欄：結算方式與本金成本 -->
     <div style="flex: 1; min-width: 200px; border-right: 1px dashed {border_color}; padding-right: 15px;">
         <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">💼 結算方式 & 本金成本</div>
         <div style="font-size: 1.2em; font-weight: bold; color: #333; margin-bottom: 5px;">{settlement_type}</div>
         <div style="font-size: 0.95em; color: #555;">投入本金: <span style="color: #FF0000; font-weight: bold;">-HKD {principal:,.2f}</span></div>
     </div>
     
-    <!-- 第二欄：當前結算總值 -->
     <div style="flex: 1; min-width: 180px; border-right: 1px dashed {border_color}; padding-right: 15px;">
         <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">💰 當前結算總值 (HKD)</div>
         <div style="font-size: 1.4em; font-weight: bold; color: #333;">{settlement_val:,.2f}</div>
         <div style="color: {text_color}; font-size: 0.9em; font-weight: bold;">{pnl_sign}{pnl:,.2f} (與本金落差)</div>
     </div>
     
-    <!-- 第三欄：淨損益額 -->
     <div style="flex: 1; min-width: 180px; border-right: 1px dashed {border_color}; padding-right: 15px;">
         <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">⚖️ 淨損益額 / 損益率</div>
         <div style="font-size: 1.4em; font-weight: bold; color: {text_color};">{pnl_emoji} {pnl_sign}{pnl:,.2f}</div>
         <div style="color: {text_color}; font-size: 0.9em; font-weight: bold;">回報率: {pnl_sign}{pnl_pct:.2f}%</div>
     </div>
     
-    <!-- 第四欄：接貨市值與印花稅 -->
     <div style="flex: 1; min-width: 180px;">
         <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">{delivery_title}</div>
         <div style="font-size: 1.4em; font-weight: bold; color: #333;">{delivery_main}</div>
@@ -272,7 +265,6 @@ st.markdown(html_panel, unsafe_allow_html=True)
 # ==========================================
 st.markdown("### 📊 股權寶到期損益曲線圖")
 
-# 【重要更新】：圖表的 X 軸資料點範圍改由左側的 slider 變數控制
 prices = np.linspace(chart_min, chart_max, 300)
 pnls = np.where(prices >= strike_price, max_profit, (shares * prices) - principal)
 
