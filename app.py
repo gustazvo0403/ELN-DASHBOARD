@@ -10,7 +10,7 @@ st.set_page_config(page_title="大豐銀行 - 股權寶(ELD)收益模擬器", la
 
 st.markdown("""
     <style>
-    /* 三大情境專用卡片樣式 */
+    div[data-testid="stMetricValue"] { font-size: 1.6rem !important; }
     .scenario-card { padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
     .card-green { border-left: 6px solid #00A36C; background-color: #f0fff4; }
     .card-yellow { border-left: 6px solid #FFC000; background-color: #fffff0; }
@@ -26,7 +26,7 @@ st.title("📈 股權寶 (ELD) 投資收益模擬器")
 st.markdown("支援 **Excel 批量導入** 或 **手動輸入**。透過調整**計價日收市價**，直觀了解不同市場情況下的結算方式與真實損益。")
 
 # ==========================================
-# 2. 初始化 Session State (聯動的核心機制)
+# 2. 初始化與狀態管理 (Session State)
 # ==========================================
 keys_defaults = {
     "underlying": "阿里巴巴",
@@ -67,47 +67,36 @@ if data_mode == "📁 批量導入 Excel":
     
     if uploaded_file:
         try:
-            # 讀取並清理 Excel
             df = pd.read_excel(uploaded_file, engine='openpyxl').dropna(how='all')
             
             if '代號 Code' in df.columns and '掛鈎股票 Underlying2' in df.columns:
                 df = df.dropna(subset=['代號 Code', '掛鈎股票 Underlying2'])
                 display_options = df['代號 Code'].astype(str) + " - " + df['掛鈎股票 Underlying2'].astype(str)
                 
-                # 定義回呼函數：當下拉選單改變時，立刻更新所有狀態
-                def on_excel_change():
-                    idx = st.session_state.excel_selector
-                    row = df.loc[idx]
+                selected_idx = st.sidebar.selectbox("🔍 請選擇要模擬的產品：", df.index, format_func=lambda x: display_options[x])
+                
+                if st.session_state.prev_excel_sel != selected_idx:
+                    row = df.loc[selected_idx]
                     
-                    st.session_state.underlying = str(row.get('掛鈎股票 Underlying2', st.session_state.underlying))
-                    st.session_state.ric = str(row.get('編號 RIC', st.session_state.ric))
-                    st.session_state.ref_price = float(row.get('參考現價 REF INIT PRICE (HKD)', st.session_state.ref_price))
+                    st.session_state.underlying = str(row.get('掛鈎股票 Underlying2', ""))
+                    st.session_state.ric = str(row.get('編號 RIC', ""))
+                    st.session_state.ref_price = float(row.get('參考現價 REF INIT PRICE (HKD)', 0.0))
                     
                     raw_strike = float(row.get('折扣率 STRIKE(%)', 0.9))
                     st.session_state.strike_pct = raw_strike * 100 if raw_strike <= 1.0 else raw_strike
                     
-                    st.session_state.shares = int(row.get('參考股數 REF NO OF SHARES', st.session_state.shares))
-                    st.session_state.principal = float(row.get('參考交易金額 REF DEPOSIT AMT (HKD)', st.session_state.principal))
+                    st.session_state.shares = int(row.get('參考股數 REF NO OF SHARES', 0))
+                    st.session_state.principal = float(row.get('參考交易金額 REF DEPOSIT AMT (HKD)', 0.0))
                     
-                    st.session_state.val_date = str(row.get('生效日 VALUE DATE', st.session_state.val_date))[:10]
-                    st.session_state.fix_date = str(row.get('計價日 FIXING DATE', st.session_state.fix_date))[:10]
+                    st.session_state.val_date = str(row.get('生效日 VALUE DATE', ""))[:10]
+                    st.session_state.fix_date = str(row.get('計價日 FIXING DATE', ""))[:10]
                     
-                    # 自動推算極端下跌價格
-                    bk_even = st.session_state.principal / st.session_state.shares if st.session_state.shares else 1
-                    st.session_state.extreme_drop = round(bk_even * 0.85, 2)
-
-                selected_idx = st.sidebar.selectbox(
-                    "🔍 請選擇要模擬的產品：", 
-                    df.index, 
-                    format_func=lambda x: display_options[x],
-                    key="excel_selector",
-                    on_change=on_excel_change
-                )
-                
-                # 初次載入時強制觸發一次更新
-                if st.session_state.prev_excel_sel != st.session_state.excel_selector:
-                    on_excel_change()
-                    st.session_state.prev_excel_sel = st.session_state.excel_selector
+                    if st.session_state.shares > 0:
+                        bk_even = st.session_state.principal / st.session_state.shares
+                        st.session_state.extreme_drop = round(bk_even * 0.85, 2)
+                    
+                    st.session_state.prev_excel_sel = selected_idx
+                    st.rerun() 
                     
         except ImportError:
             st.sidebar.error("❌ 系統缺少讀取 Excel 的依賴套件。請執行：`pip install openpyxl`")
@@ -115,9 +104,10 @@ if data_mode == "📁 批量導入 Excel":
             st.sidebar.error(f"讀取 Excel 失敗，請確認檔案格式。錯誤資訊: {e}")
 
 # ==========================================
-# 5. 左側：參數設定區 (與 Session State 綁定)
+# 5. 左側：參數設定區 
 # ==========================================
 st.sidebar.header("⚙️ 2. 參數設定區 (可手動修改)")
+
 st.sidebar.text_input("掛鈎股票名稱", key="underlying")
 st.sidebar.text_input("股票代號 (RIC)", key="ric")
 
@@ -132,10 +122,8 @@ st.sidebar.number_input("折扣率 (%)", step=1.0, key="strike_pct")
 st.sidebar.number_input("參考股數 (股)", step=100, key="shares")
 st.sidebar.number_input("交易金額/本金 (HKD) - 可修改", step=1000.0, key="principal")
 
-st.sidebar.markdown("---")
 st.sidebar.number_input("📉 情況三極端下跌收市價假設 (HKD)", step=1.0, key="extreme_drop")
 
-# 如果狀態被重置為空，顯示提示
 required_keys = ["ref_price", "strike_pct", "shares", "principal", "extreme_drop"]
 if any(st.session_state[k] is None for k in required_keys):
     st.info("👈 **目前無參數數據。** 請在左側手動輸入參數，或點擊左上方「批量導入 Excel」上傳檔案以開始模擬。")
@@ -152,6 +140,30 @@ maturity_amt = shares * strike_price
 breakeven = principal / shares if shares else 0
 max_profit = maturity_amt - principal
 
+# ==========================================
+# 6. 左側：圖表橫軸範圍設定 (移至關鍵指標上方)
+# ==========================================
+st.sidebar.markdown("---")
+st.sidebar.header("📊 3. 圖表顯示設定")
+
+min_bound = max(0.0, float(ref_price * 0.1))
+max_bound = float(ref_price * 2.0)
+
+default_chart_min = float(ref_price * 0.4)
+default_chart_max = float(ref_price * 1.3)
+
+chart_range = st.sidebar.slider(
+    "設定損益曲線圖「橫軸」區間範圍 (HKD)", 
+    min_value=min_bound, 
+    max_value=max_bound, 
+    value=(default_chart_min, default_chart_max), 
+    step=1.0
+)
+chart_min, chart_max = chart_range
+
+# ==========================================
+# 7. 左側：產品關鍵指標
+# ==========================================
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📌 產品關鍵指標")
 st.sidebar.info(f"""
@@ -162,14 +174,18 @@ st.sidebar.info(f"""
 """)
 
 # ==========================================
-# 6. 主區域：互動滑動條與自定義面板
+# 8. 主區域：互動滑動條 
 # ==========================================
 st.markdown(f"### 🎚️ 模擬【{st.session_state.underlying}】計價日表現")
+
+# 防止滑動條超出範圍報錯
+default_closing = max(chart_min, min(float(ref_price), chart_max))
+
 closing_price = st.slider(
     "請左右拉動橫軸，設定「計價日收市價」(HKD)，觀察對應的損益變化：", 
-    min_value=float(ref_price * 0.4), 
-    max_value=float(ref_price * 1.3), 
-    value=float(ref_price), 
+    min_value=float(chart_min), 
+    max_value=float(chart_max), 
+    value=default_closing, 
     step=0.5
 )
 
@@ -191,14 +207,22 @@ else:
 pnl = settlement_val - principal
 pnl_pct = (pnl / principal) * 100 if principal else 0
 
-# 定義動態顏色 (小於 0 顯示紅色，大於等於 0 顯示綠色)
-bg_color = "#fff0f0" if pnl < 0 else "#f0fff4"
-border_color = "#ffcccc" if pnl < 0 else "#ccffcc"
-text_color = "#FF0000" if pnl < 0 else "#00A36C"
-pnl_sign = "+" if pnl >= 0 else ""
-pnl_emoji = "📈" if pnl >= 0 else "📉"
+# ==========================================
+# 9. 動態資訊面板 (包含本金與紅綠辨識)
+# ==========================================
+if pnl >= 0:
+    bg_color = "#f0fff4"
+    border_color = "#ccffcc"
+    text_color = "#00A36C"
+    pnl_sign = "+"
+    pnl_emoji = "📈"
+else:
+    bg_color = "#fff0f0"
+    border_color = "#ffcccc"
+    text_color = "#FF0000"
+    pnl_sign = ""
+    pnl_emoji = "📉"
 
-# 第四欄顯示邏輯
 if scenario == "A":
     delivery_title = "📦 接貨股票市值 (HKD)"
     delivery_main = "—"
@@ -209,58 +233,69 @@ else:
     delivery_main = f"{delivery_val:,.2f}"
     delivery_sub = f"預估印花稅支出: <span style='color: #FF0000; font-weight: bold;'>-HKD {tax:,.2f}</span>"
 
-# 自定義 HTML 面板
 html_panel = f"""
 <div style="display: flex; flex-wrap: wrap; gap: 15px; background-color: {bg_color}; border: 1px solid {border_color}; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    
     <div style="flex: 1; min-width: 200px; border-right: 1px dashed {border_color}; padding-right: 15px;">
         <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">💼 結算方式 & 本金成本</div>
         <div style="font-size: 1.2em; font-weight: bold; color: #333; margin-bottom: 5px;">{settlement_type}</div>
         <div style="font-size: 0.95em; color: #555;">投入本金: <span style="color: #FF0000; font-weight: bold;">-HKD {principal:,.2f}</span></div>
     </div>
+    
     <div style="flex: 1; min-width: 180px; border-right: 1px dashed {border_color}; padding-right: 15px;">
         <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">💰 當前結算總值 (HKD)</div>
         <div style="font-size: 1.4em; font-weight: bold; color: #333;">{settlement_val:,.2f}</div>
         <div style="color: {text_color}; font-size: 0.9em; font-weight: bold;">{pnl_sign}{pnl:,.2f} (與本金落差)</div>
     </div>
+    
     <div style="flex: 1; min-width: 180px; border-right: 1px dashed {border_color}; padding-right: 15px;">
         <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">⚖️ 淨損益額 / 損益率</div>
         <div style="font-size: 1.4em; font-weight: bold; color: {text_color};">{pnl_emoji} {pnl_sign}{pnl:,.2f}</div>
         <div style="color: {text_color}; font-size: 0.9em; font-weight: bold;">回報率: {pnl_sign}{pnl_pct:.2f}%</div>
     </div>
+    
     <div style="flex: 1; min-width: 180px;">
         <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">{delivery_title}</div>
         <div style="font-size: 1.4em; font-weight: bold; color: #333;">{delivery_main}</div>
         <div style="font-size: 0.9em;">{delivery_sub}</div>
     </div>
+    
 </div>
 """
 st.markdown(html_panel, unsafe_allow_html=True)
 
 # ==========================================
-# 7. 互動損益折線圖 (Plotly)
+# 10. 互動損益折線圖 (Plotly) - 字體重疊優化版
 # ==========================================
 st.markdown("### 📊 股權寶到期損益曲線圖")
 
-prices = np.linspace(ref_price * 0.4, ref_price * 1.3, 300)
+prices = np.linspace(chart_min, chart_max, 300)
 pnls = np.where(prices >= strike_price, max_profit, (shares * prices) - principal)
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=prices, y=pnls, mode='lines', name='淨損益', line=dict(color='#1E90FF', width=3)))
 
-fig.add_vline(x=strike_price, line_dash="dash", line_color="orange", annotation_text=f"行使價 ({strike_price:.2f})", annotation_position="top right")
-fig.add_vline(x=breakeven, line_dash="dash", line_color="red", annotation_text=f"盈虧平衡點 ({breakeven:.2f})", annotation_position="bottom right")
-fig.add_vline(x=closing_price, line_width=2, line_color="purple", annotation_text=f"📍 當前收市價 ({closing_price:.2f})", annotation_position="top left")
+# 【優化】使用 HTML 換行符號 <br> 讓標籤變為雙行，並錯開 annotation_position 避免文字互相覆蓋
+fig.add_vline(x=strike_price, line_dash="dash", line_color="orange", 
+              annotation_text=f"行使價<br>{strike_price:.2f}", annotation_position="top left")
+
+fig.add_vline(x=breakeven, line_dash="dash", line_color="red", 
+              annotation_text=f"盈虧平衡點<br>{breakeven:.2f}", annotation_position="bottom right")
+
+fig.add_vline(x=closing_price, line_width=2, line_color="purple", 
+              annotation_text=f"📍 當前收市價<br>{closing_price:.2f}", annotation_position="top right")
+
 fig.add_hline(y=0, line_width=1.5, line_color="black")
 
 fig.update_layout(
     xaxis_title="計價日收市價 (HKD)", yaxis_title="淨損益 (HKD)",
     plot_bgcolor="rgba(245,245,245,0.8)", hovermode="x unified",
-    height=400, margin=dict(l=20, r=20, t=30, b=20)
+    height=450, margin=dict(l=20, r=20, t=40, b=20)
 )
 st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 8. 三種潛在情況詳細數據 (靜態展示區)
+# 11. 三種潛在情況詳細數據 (靜態展示區)
 # ==========================================
 st.markdown("---")
 st.markdown("### 📋 本次投資的三種潛在情況詳解")
@@ -306,7 +341,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 9. 重要提示 (免責聲明)
+# 12. 重要提示 (免責聲明)
 # ==========================================
 st.markdown("---")
 st.info("""
