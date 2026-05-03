@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 # ==========================================
 # 1. 網頁基本設定與樣式
 # ==========================================
-st.set_page_config(page_title="大豐銀行 - 股權寶(ELD)收益模擬器", layout="wide", page_icon="📈")
+st.set_page_config(page_title="大豐銀行 - 股權寶(ELN)收益模擬器", layout="wide", page_icon="📈")
 
 st.markdown("""
     <style>
