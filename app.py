@@ -6,11 +6,13 @@ import plotly.graph_objects as go
 # ==========================================
 # 1. 網頁基本設定與樣式
 # ==========================================
-st.set_page_config(page_title="大豐銀行 - 股權寶(ELD)收益模擬器", layout="wide", page_icon="📈")
+st.set_page_config(page_title="股權寶(ELD)收益模擬器", layout="wide", page_icon="📈")
 
 st.markdown("""
     <style>
+    /* 縮小 Metric 數值字體大小，避免文字太長被截斷 */
     div[data-testid="stMetricValue"] { font-size: 1.6rem !important; }
+    /* 三大情境專用卡片樣式 */
     .scenario-card { padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
     .card-green { border-left: 6px solid #00A36C; background-color: #f0fff4; }
     .card-yellow { border-left: 6px solid #FFC000; background-color: #fffff0; }
